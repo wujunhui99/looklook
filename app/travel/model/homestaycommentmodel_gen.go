@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
+
 	"github.com/zeromicro/go-zero/core/stores/builder"
 	"github.com/zeromicro/go-zero/core/stores/cache"
 	"github.com/zeromicro/go-zero/core/stores/sqlc"
@@ -31,8 +34,18 @@ type (
 	homestayCommentModel interface {
 		Insert(ctx context.Context, session sqlx.Session, data *HomestayComment) (sql.Result, error)
 		FindOne(ctx context.Context, id int64) (*HomestayComment, error)
-		Update(ctx context.Context, session sqlx.Session, data *HomestayComment) error
+		Update(ctx context.Context, session sqlx.Session, data *HomestayComment) (sql.Result, error)
+		UpdateWithVersion(ctx context.Context, session sqlx.Session, data *HomestayComment) error
 		Trans(ctx context.Context, fn func(context context.Context, session sqlx.Session) error) error
+		SelectBuilder() squirrel.SelectBuilder
+		DeleteSoft(ctx context.Context, session sqlx.Session, data *HomestayComment) error
+		FindSum(ctx context.Context, sumBuilder squirrel.SelectBuilder, field string) (float64, error)
+		FindCount(ctx context.Context, countBuilder squirrel.SelectBuilder, field string) (int64, error)
+		FindAll(ctx context.Context, rowBuilder squirrel.SelectBuilder, orderBy string) ([]*HomestayComment, error)
+		FindPageListByPage(ctx context.Context, rowBuilder squirrel.SelectBuilder, page, pageSize int64, orderBy string) ([]*HomestayComment, error)
+		FindPageListByPageWithTotal(ctx context.Context, rowBuilder squirrel.SelectBuilder, page, pageSize int64, orderBy string) ([]*HomestayComment, int64, error)
+		FindPageListByIdDESC(ctx context.Context, rowBuilder squirrel.SelectBuilder, preMinId, pageSize int64) ([]*HomestayComment, error)
+		FindPageListByIdASC(ctx context.Context, rowBuilder squirrel.SelectBuilder, preMaxId, pageSize int64) ([]*HomestayComment, error)
 
 		Delete(ctx context.Context, session sqlx.Session, id int64) error
 	}
@@ -104,16 +117,240 @@ func (m *defaultHomestayCommentModel) Insert(ctx context.Context, session sqlx.S
 	return ret, err
 }
 
-func (m *defaultHomestayCommentModel) Update(ctx context.Context, session sqlx.Session, data *HomestayComment) error {
+func (m *defaultHomestayCommentModel) Update(ctx context.Context, session sqlx.Session, data *HomestayComment) (sql.Result, error) {
 	homestayCommentIdKey := fmt.Sprintf("%s%v", cacheHomestayCommentIdPrefix, data.Id)
-	_, err := m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
+	return m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
 		query := fmt.Sprintf("update %s set %s where `id` = ?", m.table, homestayCommentRowsWithPlaceHolder)
 		if session != nil {
 			return session.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.HomestayId, data.UserId, data.Content, data.Star, data.Version, data.Id)
 		}
 		return conn.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.HomestayId, data.UserId, data.Content, data.Star, data.Version, data.Id)
 	}, homestayCommentIdKey)
-	return err
+}
+
+func (m *defaultHomestayCommentModel) UpdateWithVersion(ctx context.Context, session sqlx.Session, data *HomestayComment) error {
+
+	oldVersion := data.Version
+	data.Version += 1
+
+	var sqlResult sql.Result
+	var err error
+
+	homestayCommentIdKey := fmt.Sprintf("%s%v", cacheHomestayCommentIdPrefix, data.Id)
+	sqlResult, err = m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (result sql.Result, err error) {
+		query := fmt.Sprintf("update %s set %s where `id` = ? and version = ? ", m.table, homestayCommentRowsWithPlaceHolder)
+		if session != nil {
+			return session.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.HomestayId, data.UserId, data.Content, data.Star, data.Version, data.Id, oldVersion)
+		}
+		return conn.ExecCtx(ctx, query, data.DeleteTime, data.DelState, data.HomestayId, data.UserId, data.Content, data.Star, data.Version, data.Id, oldVersion)
+	}, homestayCommentIdKey)
+	if err != nil {
+		return err
+	}
+	updateCount, err := sqlResult.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updateCount == 0 {
+		return ErrNoRowsUpdate
+	}
+
+	return nil
+}
+
+func (m *defaultHomestayCommentModel) DeleteSoft(ctx context.Context, session sqlx.Session, data *HomestayComment) error {
+	data.DelState = DelStateYes
+	data.DeleteTime = time.Now()
+	if err := m.UpdateWithVersion(ctx, session, data); err != nil {
+		return errors.Wrapf(errors.New("delete soft failed "), "HomestayCommentModel delete err : %+v", err)
+	}
+	return nil
+}
+
+func (m *defaultHomestayCommentModel) FindSum(ctx context.Context, builder squirrel.SelectBuilder, field string) (float64, error) {
+
+	if len(field) == 0 {
+		return 0, errors.Wrapf(errors.New("FindSum Least One Field"), "FindSum Least One Field")
+	}
+
+	builder = builder.Columns("IFNULL(SUM(" + field + "),0)")
+
+	query, values, err := builder.Where("del_state = ?", DelStateNo).ToSql()
+	if err != nil {
+		return 0, err
+	}
+
+	var resp float64
+	err = m.QueryRowNoCacheCtx(ctx, &resp, query, values...)
+	switch err {
+	case nil:
+		return resp, nil
+	default:
+		return 0, err
+	}
+}
+
+func (m *defaultHomestayCommentModel) FindCount(ctx context.Context, builder squirrel.SelectBuilder, field string) (int64, error) {
+
+	if len(field) == 0 {
+		return 0, errors.Wrapf(errors.New("FindCount Least One Field"), "FindCount Least One Field")
+	}
+
+	builder = builder.Columns("COUNT(" + field + ")")
+
+	query, values, err := builder.Where("del_state = ?", DelStateNo).ToSql()
+	if err != nil {
+		return 0, err
+	}
+
+	var resp int64
+	err = m.QueryRowNoCacheCtx(ctx, &resp, query, values...)
+	switch err {
+	case nil:
+		return resp, nil
+	default:
+		return 0, err
+	}
+}
+
+func (m *defaultHomestayCommentModel) FindAll(ctx context.Context, builder squirrel.SelectBuilder, orderBy string) ([]*HomestayComment, error) {
+
+	builder = builder.Columns(homestayCommentRows)
+
+	if orderBy == "" {
+		builder = builder.OrderBy("id DESC")
+	} else {
+		builder = builder.OrderBy(orderBy)
+	}
+
+	query, values, err := builder.Where("del_state = ?", DelStateNo).ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var resp []*HomestayComment
+	err = m.QueryRowsNoCacheCtx(ctx, &resp, query, values...)
+	switch err {
+	case nil:
+		return resp, nil
+	default:
+		return nil, err
+	}
+}
+
+func (m *defaultHomestayCommentModel) FindPageListByPage(ctx context.Context, builder squirrel.SelectBuilder, page, pageSize int64, orderBy string) ([]*HomestayComment, error) {
+
+	builder = builder.Columns(homestayCommentRows)
+
+	if orderBy == "" {
+		builder = builder.OrderBy("id DESC")
+	} else {
+		builder = builder.OrderBy(orderBy)
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+
+	query, values, err := builder.Where("del_state = ?", DelStateNo).Offset(uint64(offset)).Limit(uint64(pageSize)).ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var resp []*HomestayComment
+	err = m.QueryRowsNoCacheCtx(ctx, &resp, query, values...)
+	switch err {
+	case nil:
+		return resp, nil
+	default:
+		return nil, err
+	}
+}
+
+func (m *defaultHomestayCommentModel) FindPageListByPageWithTotal(ctx context.Context, builder squirrel.SelectBuilder, page, pageSize int64, orderBy string) ([]*HomestayComment, int64, error) {
+
+	total, err := m.FindCount(ctx, builder, "id")
+	if err != nil {
+		return nil, 0, err
+	}
+
+	builder = builder.Columns(homestayCommentRows)
+
+	if orderBy == "" {
+		builder = builder.OrderBy("id DESC")
+	} else {
+		builder = builder.OrderBy(orderBy)
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+
+	query, values, err := builder.Where("del_state = ?", DelStateNo).Offset(uint64(offset)).Limit(uint64(pageSize)).ToSql()
+	if err != nil {
+		return nil, total, err
+	}
+
+	var resp []*HomestayComment
+	err = m.QueryRowsNoCacheCtx(ctx, &resp, query, values...)
+	switch err {
+	case nil:
+		return resp, total, nil
+	default:
+		return nil, total, err
+	}
+}
+
+func (m *defaultHomestayCommentModel) FindPageListByIdDESC(ctx context.Context, builder squirrel.SelectBuilder, preMinId, pageSize int64) ([]*HomestayComment, error) {
+
+	builder = builder.Columns(homestayCommentRows)
+
+	if preMinId > 0 {
+		builder = builder.Where(" id < ? ", preMinId)
+	}
+
+	query, values, err := builder.Where("del_state = ?", DelStateNo).OrderBy("id DESC").Limit(uint64(pageSize)).ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var resp []*HomestayComment
+	err = m.QueryRowsNoCacheCtx(ctx, &resp, query, values...)
+	switch err {
+	case nil:
+		return resp, nil
+	default:
+		return nil, err
+	}
+}
+
+func (m *defaultHomestayCommentModel) FindPageListByIdASC(ctx context.Context, builder squirrel.SelectBuilder, preMaxId, pageSize int64) ([]*HomestayComment, error) {
+
+	builder = builder.Columns(homestayCommentRows)
+
+	if preMaxId > 0 {
+		builder = builder.Where(" id > ? ", preMaxId)
+	}
+
+	query, values, err := builder.Where("del_state = ?", DelStateNo).OrderBy("id ASC").Limit(uint64(pageSize)).ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var resp []*HomestayComment
+	err = m.QueryRowsNoCacheCtx(ctx, &resp, query, values...)
+	switch err {
+	case nil:
+		return resp, nil
+	default:
+		return nil, err
+	}
+}
+
+func (m *defaultHomestayCommentModel) SelectBuilder() squirrel.SelectBuilder {
+	return squirrel.Select().From(m.table)
 }
 
 func (m *defaultHomestayCommentModel) formatPrimary(primary any) string {
