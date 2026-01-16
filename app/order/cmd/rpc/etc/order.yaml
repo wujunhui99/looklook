@@ -1,0 +1,43 @@
+Name: order.rpc
+ListenOn: 0.0.0.0:2001
+Mode: dev
+Etcd:
+  Hosts:
+  - ${ETCD_HOST}:${ETCD_PORT}
+  Key: order.rpc
+
+Log:
+  ServiceName: order.rpc
+  Level: error
+
+#监控
+Prometheus:
+  Host: 0.0.0.0
+  Port: 4002
+  Path: /metrics
+
+#链路追踪
+Telemetry:
+  Name: order.rpc
+  Endpoint:  http://${JAEGER_HOST}:${JAEGER_PORT}/api/traces
+  Sampler: 1.0
+  Batcher: jaeger
+
+Redis:
+  Host: ${REDIS_HOST}:${REDIS_PORT}
+  Type: node
+  Pass: ${REDIS_PASSWORD}
+  Key : order.rpc
+DB:
+  DataSource: ${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(${MYSQL_HOST}:${MYSQL_PORT})/looklook_order?charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai
+Cache:
+  - Host: ${REDIS_HOST}:${REDIS_PORT}
+    Pass: ${REDIS_PASSWORD}
+
+#rpc
+TravelRpcConf:
+  Etcd:
+    Hosts:
+      - ${ETCD_HOST}:${ETCD_PORT}
+    Key: travel.rpc
+

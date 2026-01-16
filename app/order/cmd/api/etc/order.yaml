@@ -1,0 +1,49 @@
+Name: order-api
+Host: 0.0.0.0
+Port: 1001
+Mode: dev
+
+#jwtAuth
+JwtAuth:
+  AccessSecret: ae0536f9-6450-4606-8e13-5a19ed505da0
+
+Log:
+  ServiceName: order-api
+  Level: error
+
+#监控
+Prometheus:
+  Host: 0.0.0.0
+  Port: 4001
+  Path: /metrics
+
+#链路追踪
+Telemetry:
+  Name: order-api
+  Endpoint: http://${JAEGER_HOST}:${JAEGER_PORT}/api/traces
+  Sampler: 1.0
+  Batcher: jaeger
+
+#rpc
+OrderRpcConf:
+  Etcd:
+    Hosts:
+      - ${ETCD_HOST}:${ETCD_PORT}
+    Key: order.rpc
+
+PaymentRpcConf:
+  Etcd:
+    Hosts:
+      - ${ETCD_HOST}:${ETCD_PORT}
+    Key: payment.rpc
+
+
+  
+TravelRpcConf:
+  Etcd:
+    Hosts:
+      - ${ETCD_HOST}:${ETCD_PORT}
+    Key: travel.rpc
+
+
+
