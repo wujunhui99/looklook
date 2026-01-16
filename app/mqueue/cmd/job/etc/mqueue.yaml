@@ -1,0 +1,43 @@
+Name: mqueue-job
+Mode: dev
+
+#监控
+Prometheus:
+  Host: 0.0.0.0
+  Port: 4010
+  Path: /metrics
+
+#Link Tracking
+Telemetry:
+  Name: mqueue-job
+  Endpoint: http://${JAEGER_HOST}:${JAEGER_PORT}/api/traces
+  Sampler: 1.0
+  Batcher: jaeger
+
+Log:
+  ServiceName: mqueue-job
+  Level: error
+
+Redis:
+  Host: ${REDIS_HOST}:${REDIS_PORT}
+  Type: node
+  Pass: ${REDIS_PASSWORD}
+
+#WxMiniConf
+WxMiniConf:
+  AppId: wx2add729fadddddd
+  Secret: 20365395b3de9b2a9351ddddddd
+
+#rpc service.
+OrderRpcConf:
+  Etcd:
+    Hosts:
+      - ${ETCD_HOST}:${ETCD_PORT}
+    Key: order.rpc
+
+#rpc service
+UsercenterRpcConf:
+  Etcd:
+    Hosts:
+      - ${ETCD_HOST}:${ETCD_PORT}
+    Key: usercenter.rpc

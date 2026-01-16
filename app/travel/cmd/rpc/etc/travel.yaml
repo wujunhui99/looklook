@@ -1,4 +1,4 @@
-Name: travel-rpc
+Name: travel.rpc
 ListenOn: 0.0.0.0:2003
 Mode: dev
 
@@ -10,13 +10,13 @@ Prometheus:
 
 #链路追踪
 Telemetry:
-  Name: travel-rpc
-  Endpoint: http://127.0.0.1:14268/api/traces
+  Name: travel.rpc
+  Endpoint: http://${JAEGER_HOST}:${JAEGER_PORT}/api/traces
   Sampler: 1.0
   Batcher: jaeger
 
 Log:
-  ServiceName: travel-rpc
+  ServiceName: travel.rpc
   Level: error
 
 DB:
