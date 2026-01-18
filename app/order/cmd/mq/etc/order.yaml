@@ -1,0 +1,46 @@
+Name: order-mq
+Mode: dev
+
+#监控
+Prometheus:
+  Host: 0.0.0.0
+  Port: 4003
+  Path: /metrics
+
+#链路追踪
+Telemetry:
+  Name: order-mq
+  Endpoint: http://${JAEGER_HOST}:${JAEGER_PORT}/api/traces
+  Sampler: 1.0
+  Batcher: jaeger
+
+Log:
+  ServiceName: order-mq
+  Level: error
+
+Redis:
+  Host: ${REDIS_HOST}:${REDIS_PORT}
+  Type: node
+  Pass: ${REDIS_PASSWORD}
+
+#kq
+PaymentUpdateStatusConf:
+  Name: PaymentUpdateStatus
+  Brokers:
+    - ${KAFKA_HOST}:${KAFKA_PORT}
+  Group: payment-update-paystatus-group
+  Topic: payment-update-paystatus-topic
+  Offset: first
+  Consumers: 1
+  Processors: 1
+
+#rpc
+OrderRpcConf:
+  Endpoints:
+    - ${ORDER_RPC_HOST}:${ORDER_RPC_PORT}
+  NonBlock: true
+
+UsercenterRpcConf:
+  Endpoints:
+    - ${USERCENTER_RPC_HOST}:${USERCENTER_RPC_PORT}
+  NonBlock: true
