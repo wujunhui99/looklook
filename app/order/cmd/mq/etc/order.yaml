@@ -36,11 +36,15 @@ PaymentUpdateStatusConf:
 
 #rpc
 OrderRpcConf:
-  Endpoints:
-    - ${ORDER_RPC_HOST}:${ORDER_RPC_PORT}
+  Etcd:
+    Hosts:
+      - ${ETCD_HOST}:${ETCD_PORT}
+    Key: order.rpc
   NonBlock: true
 
 UsercenterRpcConf:
-  Endpoints:
-    - ${USERCENTER_RPC_HOST}:${USERCENTER_RPC_PORT}
+  Etcd:
+    Hosts:
+      - ${ETCD_HOST}:${ETCD_PORT}
+    Key: usercenter.rpc
   NonBlock: true
