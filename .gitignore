@@ -14,5 +14,4 @@ data/*
 .cache
 
 #vscode
-.vscode
 .vscode/

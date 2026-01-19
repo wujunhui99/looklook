@@ -1,6 +1,10 @@
 Name: travel.rpc
 ListenOn: 0.0.0.0:2003
 Mode: dev
+Etcd:
+  Hosts:
+  - ${ETCD_HOST}:${ETCD_PORT}
+  Key: travel.rpc
 
 #监控
 Prometheus:
